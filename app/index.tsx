@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { MARKETS, patternLabel } from "../src/domain/markets";
 import { CalculationCheckpoint, CellValues } from "../src/domain/types";
+import { CalculationMode } from "../src/domain/calculation";
 import { CalculationHistoryEntry, clearCalculationHistory, loadCalculationHistory, loadCheckpoint, loadDailyValues, loadRowDates, saveCalculationHistory, saveCheckpoint, saveDailyValues, saveRowDates, loadChartHighlightCache, saveChartHighlightCache, loadCalculationInputs, saveCalculationInputs} from "../src/storage/marketStore";
 import { AuditReport } from "../src/components/AuditReport";
 import { BUNDLED_PATTERN_CONFIGS } from "../src/config/bundledSequences";
@@ -90,6 +91,7 @@ export default function Home() {
   const [loadingColor, setLoadingColor] = useState("#7656A8");
   const [mainCell, setMainCell] = useState("G87");
   const [mainValue, setMainValue] = useState("05");
+  const [calculationMode, setCalculationMode] = useState<CalculationMode>("FOUR_DAYS_DIRECT");
   const [startMode, setStartMode] = useState<"root" | "branch">("root");
   const [branchStartCell, setBranchStartCell] = useState("");
   const [entryCell, setEntryCell] = useState("");
@@ -147,7 +149,7 @@ export default function Home() {
   useEffect(() => {
     loadDailyValues(marketId).then(setSavedValues);
     loadRowDates(marketId).then(setRowDates);
-    loadCheckpoint(marketId).then(setCheckpoint);
+    loadCheckpoint(marketId, calculationMode).then(setCheckpoint);
     loadChartHighlightCache(marketId).then(setChartHighlightCache);
     loadCalculationInputs(marketId).then((savedInputs) => {
       if (savedInputs) {
@@ -163,7 +165,7 @@ export default function Home() {
     setCalculationMessage("");
     setRecords([]);
     setActiveHistoryId(null);
-  }, [marketId]);
+  }, [marketId, calculationMode]);
 
   const performCalculation = async (values: CellValues, firstMainCell: string, savedCheckpoint?: CalculationCheckpoint | null, append = false, manualBranchStart?: string) => {
     const config = BUNDLED_PATTERN_CONFIGS[market.pattern];
@@ -173,13 +175,13 @@ export default function Home() {
       pendingBranches: savedCheckpoint.pendingBranches ?? []
     } : undefined;
     const result = restoredState
-      ? runFinalPattern(market.pattern, config.templates, values, config.cellOrder, firstMainCell, 2000, restoredState)
+      ? runFinalPattern(market.pattern, config.templates, values, config.cellOrder, firstMainCell, 2000, restoredState, calculationMode)
       : manualBranchStart
-        ? runFinalPatternFromBranch(market.pattern, config.templates, values, config.cellOrder, firstMainCell, manualBranchStart)
-        : runFinalPattern(market.pattern, config.templates, values, config.cellOrder, firstMainCell);
+        ? runFinalPatternFromBranch(market.pattern, config.templates, values, config.cellOrder, firstMainCell, manualBranchStart, 2000, calculationMode)
+        : runFinalPattern(market.pattern, config.templates, values, config.cellOrder, firstMainCell, 2000, undefined, calculationMode);
     const previousRecords =
       append && records.length > 0
-        ? records[records.length - 1].audit.days.length < 4
+        ? records[records.length - 1].audit.days.length < (calculationMode === "THREE_DAYS" ? 3 : 4)
           ? records.slice(0, -1)
           : records
         : [];
@@ -232,7 +234,7 @@ export default function Home() {
       pendingBranches: result.state.pendingBranches,
       updatedAt: new Date().toISOString()
     };
-    await saveCheckpoint(marketId, nextCheckpoint);
+    await saveCheckpoint(marketId, calculationMode, nextCheckpoint);
     setCheckpoint(nextCheckpoint);
     const historyId =
       append && activeHistoryId ? activeHistoryId : `${Date.now()}`;
@@ -298,7 +300,7 @@ export default function Home() {
     await saveDailyValues(marketId, updated);
     setSavedValues(updated);
     setSaveMessage(`${cell} = ${value} offline save झाले.`);
-    const paused = checkpoint ?? await loadCheckpoint(marketId);
+    const paused = checkpoint ?? await loadCheckpoint(marketId, calculationMode);
     if (paused?.status === "WAITING_FOR_VALUES" && paused.nextMainCell === cell && value !== "*") {
       setSaveMessage(`${cell} = ${value} save झाले. Calculation आपोआप पुढे सुरू झाली.`);
       await performCalculation(updated, paused.rootMainCell ?? cell, paused, true);
@@ -419,7 +421,7 @@ export default function Home() {
     setSavedValues(updated);
     setBatchValues("");
     setSaveMessage(`${Object.keys(updates).length} values offline save झाल्या.`);
-    const paused = checkpoint ?? await loadCheckpoint(marketId);
+    const paused = checkpoint ?? await loadCheckpoint(marketId, calculationMode);
     if (paused?.status === "WAITING_FOR_VALUES" && paused.nextMainCell && updates[paused.nextMainCell] !== undefined && updates[paused.nextMainCell] !== "*") {
       setSaveMessage(`${Object.keys(updates).length} values save झाल्या. Pending calculation आपोआप पुढे सुरू झाली.`);
       await performCalculation(updated, paused.rootMainCell ?? paused.nextMainCell, paused, true);
@@ -974,6 +976,18 @@ if (selectedMarketId === null) {
                 placeholder="उदा. 05"
                 keyboardType="number-pad"
               />
+
+              <View style={styles.startModes}>
+                <Pressable onPress={() => setCalculationMode("THREE_DAYS")} style={[styles.mode, calculationMode === "THREE_DAYS" && styles.modeActive]}>
+                  <Text style={[styles.modeText, calculationMode === "THREE_DAYS" && styles.modeTextActive]}>3 Days</Text>
+                </Pressable>
+                <Pressable onPress={() => setCalculationMode("FOUR_DAYS_DIRECT")} style={[styles.mode, calculationMode === "FOUR_DAYS_DIRECT" && styles.modeActive]}>
+                  <Text style={[styles.modeText, calculationMode === "FOUR_DAYS_DIRECT" && styles.modeTextActive]}>4 Days Direct</Text>
+                </Pressable>
+                <Pressable onPress={() => setCalculationMode("FOUR_DAYS_OPPOSITE")} style={[styles.mode, calculationMode === "FOUR_DAYS_OPPOSITE" && styles.modeActive]}>
+                  <Text style={[styles.modeText, calculationMode === "FOUR_DAYS_OPPOSITE" && styles.modeTextActive]}>4 Days Opposite</Text>
+                </Pressable>
+              </View>
 
               <View style={styles.startModes}>
                 <Pressable

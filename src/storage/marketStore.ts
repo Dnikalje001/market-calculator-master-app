@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Pattern } from "../domain/markets";
 import { CalculationCheckpoint, CellValues, MarketConfig } from "../domain/types";
+import type { CalculationMode } from "../domain/calculation";
 import type { TraversalRecord } from "../domain/traversal";
 
 export type ChartHighlightCache = {
@@ -14,7 +15,7 @@ const valuesKey = (marketId: string) => `market-calculator:values:${marketId}`;
 const rowDatesKey = (marketId: string) => `market-calculator:row-dates:${marketId}`;
 const globalRowDatesKey = "market-calculator:row-dates:global";
 const configKey = (marketId: string) => `market-calculator:config:${marketId}`;
-const checkpointKey = (marketId: string) => `market-calculator:checkpoint:${marketId}`;
+const checkpointKey = (marketId: string, mode: CalculationMode) => `market-calculator:checkpoint:${marketId}:${mode}`;
 const patternConfigKey = (pattern: Pattern) => `market-calculator:pattern-config:${pattern}`;
 const historyKey = (marketId: string) => `market-calculator:history:${marketId}`;
 
@@ -99,12 +100,12 @@ export async function loadPatternConfig(pattern: Pattern): Promise<MarketConfig 
   return raw ? JSON.parse(raw) : null;
 }
 
-export async function saveCheckpoint(marketId: string, checkpoint: CalculationCheckpoint) {
-  await AsyncStorage.setItem(checkpointKey(marketId), JSON.stringify(checkpoint));
+export async function saveCheckpoint(marketId: string, mode: CalculationMode, checkpoint: CalculationCheckpoint) {
+  await AsyncStorage.setItem(checkpointKey(marketId, mode), JSON.stringify(checkpoint));
 }
 
-export async function loadCheckpoint(marketId: string): Promise<CalculationCheckpoint | null> {
-  const raw = await AsyncStorage.getItem(checkpointKey(marketId));
+export async function loadCheckpoint(marketId: string, mode: CalculationMode): Promise<CalculationCheckpoint | null> {
+  const raw = await AsyncStorage.getItem(checkpointKey(marketId, mode));
   return raw ? JSON.parse(raw) : null;
 }
 
