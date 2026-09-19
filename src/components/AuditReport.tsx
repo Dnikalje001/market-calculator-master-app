@@ -31,6 +31,8 @@ const [statusFilter, setStatusFilter] = useState<
   "ALL" | "GREEN" | "RED" | "GREY"
 >("ALL");
 
+const expectedDayCount = calculationMode === "THREE_DAYS" ? 3 : 4;
+
 
 const groupedRecords: {
   root: { record: TraversalRecord; originalIndex: number } | null;
@@ -73,15 +75,15 @@ records.forEach((record, originalIndex) => {
   const matchesStatusFilter = (record: TraversalRecord) => {
     if (statusFilter === "ALL") return true;
 
-    const isPartial = record.audit.days.length < 4;
+    const isPartial = record.audit.days.length < expectedDayCount;
     const hasCommonCriteria = record.audit.commonCriteria.length > 0;
 
     if (statusFilter === "GREEN") {
-      return !isPartial && hasCommonCriteria;
+      return record.audit.days.length === expectedDayCount && hasCommonCriteria;
     }
 
     if (statusFilter === "RED") {
-      return !isPartial && !hasCommonCriteria;
+      return record.audit.days.length === expectedDayCount && !hasCommonCriteria;
     }
 
     if (statusFilter === "GREY") {
@@ -130,7 +132,7 @@ records.forEach((record, originalIndex) => {
           groupedRecords
             .slice(0, groupIndex + 1)
             .filter((item) =>
-              item.root?.record.audit.days.length === 4 &&
+              item.root?.record.audit.days.length === expectedDayCount &&
               item.root.record.audit.commonCriteria.length > 0
             ).length;
 
@@ -187,10 +189,10 @@ records.forEach((record, originalIndex) => {
               <Text
                 style={[
                   styles.heading,
-                  visibleRoot?.record.audit.days.length === 4 &&
+                  visibleRoot?.record.audit.days.length === expectedDayCount &&
                   visibleRoot.record.audit.commonCriteria.length > 0
                     ? styles.headingGreen
-                    : visibleRoot?.record.audit.days.length === 4
+                    : visibleRoot?.record.audit.days.length === expectedDayCount
                       ? styles.headingRed
                       : styles.headingNeutral,
                 ]}
@@ -292,10 +294,10 @@ if (matchClose) return opposite ? "Close • Opposite" : "Close";
                     const displayGroups =
                       statusFilter === "GREY"
                         ? familyRecords.filter(
-                            ({ record }) => record.audit.days.length < 4
+                            ({ record }) => record.audit.days.length < expectedDayCount
                           )
                         : familyRecords.filter(
-                            ({ record }) => record.audit.days.length === 4
+                            ({ record }) => record.audit.days.length === expectedDayCount
                           );
 
                     const groupCount = displayGroups.length;
