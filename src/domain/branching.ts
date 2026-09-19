@@ -13,9 +13,9 @@ export type CriterionBranch = {
  * Different matching sub-criteria in the same four-cell group are intentionally merged.
  */
 export function branchesFromGroup(group: GroupAudit): CriterionBranch[] {
-  const fourthDay = group.days[3];
+  const lastDay = group.days[group.days.length - 1];
   return group.commonCriteria.map((criteria) => {
-    const matchedThirdCells = fourthDay.lines
+    const matchedThirdCells = lastDay.lines
       .filter((line) => line.criteria === criteria && line.status === "MATCH")
       .map((line) => line.references[2]);
     const uniqueStarts = [...new Set(matchedThirdCells.map(groupStartForCell))];

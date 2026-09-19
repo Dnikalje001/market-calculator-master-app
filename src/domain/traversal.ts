@@ -1,4 +1,5 @@
 import { branchesFromGroup } from "./branching";
+import { CalculationMode } from "./calculation";
 import { nextMainCell } from "./mainCellCalendar";
 import { Pattern } from "./markets";
 import {
@@ -37,7 +38,7 @@ function buildTasks(
   audit: GroupAudit,
   ancestry: number[]
 ): BranchTask[] {
-  const nextMain = nextMainCell(pattern, audit.days[3].mainCell);
+  const nextMain = nextMainCell(pattern, audit.days[audit.days.length - 1].mainCell);
 
   return branchesFromGroup(audit)
     .filter((branch) => !ancestry.includes(branch.criteria))
@@ -58,7 +59,7 @@ function buildTasks(
  */
 export function runFinalPattern(
   pattern: Pattern, templates: SequenceTemplate[], values: CellValues, cellOrder: string[], firstRootMainCell: string,
-  maxGroups = 2000, savedState?: TraversalState
+  maxGroups = 2000, savedState?: TraversalState, mode: CalculationMode = "FOUR_DAYS_DIRECT"
 ): TraversalResult {
   const records: TraversalRecord[] = [];
   let rootMain = savedState?.rootMainCell ?? firstRootMainCell.toUpperCase();
@@ -79,7 +80,8 @@ export function runFinalPattern(
         templates,
         values,
         cellOrder,
-        rootMain
+        rootMain,
+        mode
       );
       if (run.status === "WAITING") return { status: "WAITING", records, waitingFor: run.waitingFor, state: state() };
       if (run.status === "STOPPED") {
@@ -95,7 +97,7 @@ export function runFinalPattern(
     }
 
     const task = branchQueue.shift()!;
-    const run: ValidGroupRun = runBranchValidGroup(pattern, templates, values, cellOrder, task.firstMainCell, task.firstStartCell, task.criteria);
+    const run: ValidGroupRun = runBranchValidGroup(pattern, templates, values, cellOrder, task.firstMainCell, task.firstStartCell, task.criteria, mode);
 
     if (run.status === "STOPPED") {
       continue;
@@ -146,11 +148,11 @@ console.log("LIMIT DEBUG", {
 /** Starts a new calculation from a user-specified known branch group. */
 export function runFinalPatternFromBranch(
   pattern: Pattern, templates: SequenceTemplate[], values: CellValues, cellOrder: string[], firstMainCell: string, firstStartCell: string,
-  maxGroups = 2000
+  maxGroups = 2000, mode: CalculationMode = "FOUR_DAYS_DIRECT"
 ): TraversalResult {
   return runFinalPattern(pattern, templates, values, cellOrder, firstMainCell, maxGroups, {
     rootMainCell: firstMainCell.toUpperCase(),
     rootResolved: true,
     pendingBranches: [{ criteria: 0, firstMainCell: firstMainCell.toUpperCase(), firstStartCell: firstStartCell.toUpperCase(), ancestry: [] }]
-  });
+  }, mode);
 }
