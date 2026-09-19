@@ -1,5 +1,7 @@
 import {
+  CalculationMode,
   evaluateDay,
+  evaluateThreeDayGroup,
   evaluateFourDayGroup,
   getThreeDayCommonCriteria,
 } from "./calculation";
@@ -9,7 +11,7 @@ import {
   resolveSequenceForStart,
   nextStartCells,
 } from "./sequenceResolver";
-import { selectFourBranchDays, selectFourValidDays } from "./validDays";
+import { selectThreeValidDays, selectFourBranchDays, selectFourValidDays } from "./validDays";
 import { CellValues, GroupAudit, SequenceTemplate } from "./types";
 
 export type FourthDayPredictionLine = {
@@ -136,8 +138,11 @@ function buildFourthDayPrediction(
   };
 }
 
-export function runRootValidGroup(pattern: Pattern, templates: SequenceTemplate[], values: CellValues, cellOrder: string[], firstMainCell: string): ValidGroupRun {
-  const selection = selectFourValidDays(pattern, values, firstMainCell);
+export function runRootValidGroup(pattern: Pattern, templates: SequenceTemplate[], values: CellValues, cellOrder: string[], firstMainCell: string, mode: CalculationMode = "FOUR_DAYS_DIRECT"): ValidGroupRun {
+  const selection =
+    mode === "THREE_DAYS"
+      ? selectThreeValidDays(pattern, values, firstMainCell)
+      : selectFourValidDays(pattern, values, firstMainCell);
   if (selection.waitingFor) {
     const partialDays = selection.days.map((day, index) =>
       evaluateDay(
@@ -146,7 +151,8 @@ export function runRootValidGroup(pattern: Pattern, templates: SequenceTemplate[
         day.mainCell,
         asMainText(values[day.mainCell]),
         cellOrder,
-        index === 3
+        index === 3,
+        mode
       )
     );
 
@@ -157,12 +163,22 @@ export function runRootValidGroup(pattern: Pattern, templates: SequenceTemplate[
       partialDays
     };
   }
-  const days = selection.days.map((day, index) => evaluateDay(resolveSequenceForMain(templates, day.mainCell), values, day.mainCell, asMainText(values[day.mainCell]), cellOrder, index === 3));
-  return { status: "COMPLETE", audit: evaluateFourDayGroup(days), skippedMainCells: selection.skippedMainCells };
+  const days = selection.days.map((day, index) => evaluateDay(resolveSequenceForMain(templates, day.mainCell), values, day.mainCell, asMainText(values[day.mainCell]), cellOrder, index === 3, mode));
+  return {
+    status: "COMPLETE",
+    audit:
+      mode === "THREE_DAYS"
+        ? evaluateThreeDayGroup(days)
+        : evaluateFourDayGroup(days),
+    skippedMainCells: selection.skippedMainCells,
+  };
 }
 
-export function runBranchValidGroup(pattern: Pattern, templates: SequenceTemplate[], values: CellValues, cellOrder: string[], firstMainCell: string, firstStartCell: string): ValidGroupRun {
-  const selection = selectFourBranchDays(pattern, values, firstMainCell, firstStartCell);
+export function runBranchValidGroup(pattern: Pattern, templates: SequenceTemplate[], values: CellValues, cellOrder: string[], firstMainCell: string, firstStartCell: string, mode: CalculationMode = "FOUR_DAYS_DIRECT"): ValidGroupRun {
+  const selection =
+    mode === "THREE_DAYS"
+      ? selectThreeValidDays(pattern, values, firstMainCell, firstStartCell)
+      : selectFourBranchDays(pattern, values, firstMainCell, firstStartCell);
   if (selection.waitingFor) {
     const partialDays = selection.days.map((day, index) =>
       evaluateDay(
@@ -175,12 +191,13 @@ export function runBranchValidGroup(pattern: Pattern, templates: SequenceTemplat
         day.mainCell,
         asMainText(values[day.mainCell]),
         cellOrder,
-        index === 3
+        index === 3,
+        mode
       )
     );
 
     const prediction =
-      partialDays.length === 3
+      mode !== "THREE_DAYS" && partialDays.length === 3
         ? buildFourthDayPrediction(
             pattern,
             templates,
@@ -204,6 +221,13 @@ export function runBranchValidGroup(pattern: Pattern, templates: SequenceTemplat
       prediction,
     };
   }
-  const days = selection.days.map((day, index) => evaluateDay(resolveSequenceForStart(pattern, templates, day.startCell!), values, day.mainCell, asMainText(values[day.mainCell]), cellOrder, index === 3));
-  return { status: "COMPLETE", audit: evaluateFourDayGroup(days), skippedMainCells: selection.skippedMainCells };
+  const days = selection.days.map((day, index) => evaluateDay(resolveSequenceForStart(pattern, templates, day.startCell!), values, day.mainCell, asMainText(values[day.mainCell]), cellOrder, index === 3, mode));
+  return {
+    status: "COMPLETE",
+    audit:
+      mode === "THREE_DAYS"
+        ? evaluateThreeDayGroup(days)
+        : evaluateFourDayGroup(days),
+    skippedMainCells: selection.skippedMainCells,
+  };
 }

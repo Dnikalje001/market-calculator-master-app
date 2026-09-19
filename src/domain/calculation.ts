@@ -1,5 +1,10 @@
 import { AuditLine, CellValues, DayAudit, GroupAudit, ReferenceTriplet } from "./types";
 
+
+export type CalculationMode =
+  | "THREE_DAYS"
+  | "FOUR_DAYS_DIRECT"
+  | "FOUR_DAYS_OPPOSITE";
 const mainDigits = (value: string): number[] =>
   [...value].filter((character) => /\d/.test(character)).map(Number);
 
@@ -27,7 +32,8 @@ export function evaluateTriplet(
   mainCell: string,
   mainValue: string,
   cellOrder: string[],
-  isFourthDay: boolean
+  isFourthDay: boolean,
+  mode: CalculationMode = "FOUR_DAYS_DIRECT"
 ): AuditLine {
   const [first, second, third] = item.references;
   const valueList = item.references.map((reference) => values[reference] ?? "");
@@ -49,8 +55,12 @@ export function evaluateTriplet(
   }
   const total = numericValues.reduce((sum, value) => sum + value, 0);
   const directLastDigit = total % 10;
+  const oppositeLastDigit = (directLastDigit + 5) % 10;
   const digits = mainDigits(mainValue);
-  const matches = digits.includes(directLastDigit);
+  const matches =
+    mode === "FOUR_DAYS_OPPOSITE" && isFourthDay
+      ? digits.includes(oppositeLastDigit)
+      : digits.includes(directLastDigit);
 
   return {
     criteria: item.criteria,
@@ -59,19 +69,30 @@ export function evaluateTriplet(
     values: numericValues,
     total,
     directLastDigit,
+    oppositeLastDigit,
     status: matches ? "MATCH" : "NO_MATCH"
   };
 }
 
 export function evaluateDay(
   sequence: ReferenceTriplet[], values: CellValues, mainCell: string, mainValue: string,
-  cellOrder: string[], isFourthDay: boolean
+  cellOrder: string[], isFourthDay: boolean,
+  mode: CalculationMode = "FOUR_DAYS_DIRECT"
 ): DayAudit {
-  const lines = sequence.map((item) => evaluateTriplet(item, values, mainCell, mainValue, cellOrder, isFourthDay));
+  const lines = sequence.map((item) =>
+    evaluateTriplet(item, values, mainCell, mainValue, cellOrder, isFourthDay, mode)
+  );
   const matchingCriteria = [...new Set(lines.filter((line) => line.status === "MATCH").map((line) => line.criteria))].sort((a, b) => a - b);
   return { mainCell, mainValue, isFourthDay, lines, matchingCriteria };
 }
 
+export function evaluateThreeDayGroup(days: DayAudit[]): GroupAudit {
+  if (days.length !== 3) throw new Error("A valid group must contain exactly three days.");
+  const commonCriteria = days[0].matchingCriteria.filter((criteria) =>
+    days.every((day) => day.matchingCriteria.includes(criteria))
+  );
+  return { days, commonCriteria };
+}
 export function evaluateFourDayGroup(days: DayAudit[]): GroupAudit {
   if (days.length !== 4) throw new Error("A valid group must contain exactly four days.");
   const commonCriteria = days[0].matchingCriteria.filter((criteria) => days.every((day) => day.matchingCriteria.includes(criteria)));
