@@ -87,9 +87,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.deva.marketcalculator'
+    namespace 'com.deva.marketcalculatormaster'
     defaultConfig {
-        applicationId 'com.deva.marketcalculator'
+        applicationId 'com.deva.marketcalculatormaster'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

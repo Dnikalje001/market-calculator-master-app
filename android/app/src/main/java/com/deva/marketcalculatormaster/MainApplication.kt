@@ -1,4 +1,4 @@
-package com.deva.marketcalculator
+package com.deva.marketcalculatormaster
 
 import android.app.Application
 import android.content.res.Configuration
