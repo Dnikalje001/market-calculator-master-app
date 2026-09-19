@@ -82,6 +82,10 @@ export function runFinalPattern(
         rootMain
       );
       if (run.status === "WAITING") return { status: "WAITING", records, waitingFor: run.waitingFor, state: state() };
+      if (run.status === "STOPPED") {
+        rootMain = nextMainCell(pattern, rootMain);
+        continue;
+      }
       records.push({ kind: "ROOT", audit: run.audit, skippedMainCells: run.skippedMainCells });
       groupsRun += 1;
       if (!run.audit.commonCriteria.length) { rootMain = nextMainCell(pattern, rootMain); continue; }
@@ -91,7 +95,12 @@ export function runFinalPattern(
     }
 
     const task = branchQueue.shift()!;
-    const run: ValidGroupRun = runBranchValidGroup(pattern, templates, values, cellOrder, task.firstMainCell, task.firstStartCell);
+    const run: ValidGroupRun = runBranchValidGroup(pattern, templates, values, cellOrder, task.firstMainCell, task.firstStartCell, task.criteria);
+
+    if (run.status === "STOPPED") {
+      continue;
+    }
+
     if (run.status === "WAITING") {
       if (run.partialDays?.length) {
         records.push({

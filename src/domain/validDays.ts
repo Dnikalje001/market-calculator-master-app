@@ -4,7 +4,7 @@ import { nextStartCells } from "./sequenceResolver";
 import { CellValues } from "./types";
 
 export type ValidDay = { mainCell: string; startCell?: string };
-export type ValidDaySelection = { days: ValidDay[]; skippedMainCells: string[]; waitingFor?: string };
+export type ValidDaySelection = { days: ValidDay[]; skippedMainCells: string[]; waitingFor?: string; stopped?: boolean };
 
 const twoDigits = (value: CellValues[string] | undefined) => {
   const text = typeof value === "number" ? String(value) : value ?? "";
@@ -91,7 +91,11 @@ export function selectFourBranchDays(
     const value = values[mainCell]
 
     if (value === "*") {
-      skippedMainCells.push(mainCell)
+      return {
+        days,
+        skippedMainCells: [...skippedMainCells, mainCell],
+        stopped: true,
+      }
     } else if (twoDigits(value)) {
       days.push({
         mainCell,

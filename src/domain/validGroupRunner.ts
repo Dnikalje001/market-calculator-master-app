@@ -42,6 +42,10 @@ export type ValidGroupRun =
       skippedMainCells: string[];
       partialDays?: ReturnType<typeof evaluateDay>[];
       prediction?: FourthDayPrediction;
+    }
+  | {
+      status: "STOPPED";
+      skippedMainCells: string[];
     };
 const asMainText = (value: CellValues[string] | undefined) => typeof value === "number" ? String(value) : value ?? "";
 
@@ -174,11 +178,18 @@ export function runRootValidGroup(pattern: Pattern, templates: SequenceTemplate[
   };
 }
 
-export function runBranchValidGroup(pattern: Pattern, templates: SequenceTemplate[], values: CellValues, cellOrder: string[], firstMainCell: string, firstStartCell: string, mode: CalculationMode = "FOUR_DAYS_DIRECT"): ValidGroupRun {
+export function runBranchValidGroup(pattern: Pattern, templates: SequenceTemplate[], values: CellValues, cellOrder: string[], firstMainCell: string, firstStartCell: string, expectedCriteria?: number, mode: CalculationMode = "FOUR_DAYS_DIRECT"): ValidGroupRun {
   const selection =
     mode === "THREE_DAYS"
       ? selectThreeValidDays(pattern, values, firstMainCell, firstStartCell)
       : selectFourBranchDays(pattern, values, firstMainCell, firstStartCell);
+  if (selection.stopped) {
+    return {
+      status: "STOPPED",
+      skippedMainCells: selection.skippedMainCells,
+    };
+  }
+
   if (selection.waitingFor) {
     const partialDays = selection.days.map((day, index) =>
       evaluateDay(
@@ -195,6 +206,16 @@ export function runBranchValidGroup(pattern: Pattern, templates: SequenceTemplat
         mode
       )
     );
+
+    if (
+      expectedCriteria !== undefined &&
+      partialDays.some((day) => !day.matchingCriteria.includes(expectedCriteria))
+    ) {
+      return {
+        status: "STOPPED",
+        skippedMainCells: selection.skippedMainCells,
+      };
+    }
 
     const prediction =
       mode !== "THREE_DAYS" && partialDays.length === 3
@@ -222,6 +243,17 @@ export function runBranchValidGroup(pattern: Pattern, templates: SequenceTemplat
     };
   }
   const days = selection.days.map((day, index) => evaluateDay(resolveSequenceForStart(pattern, templates, day.startCell!), values, day.mainCell, asMainText(values[day.mainCell]), cellOrder, index === 3, mode));
+
+  if (
+    expectedCriteria !== undefined &&
+    days.some((day) => !day.matchingCriteria.includes(expectedCriteria))
+  ) {
+    return {
+      status: "STOPPED",
+      skippedMainCells: selection.skippedMainCells,
+    };
+  }
+
   return {
     status: "COMPLETE",
     audit:
