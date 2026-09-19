@@ -6,10 +6,18 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/images/icon.png",
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router"
+    ],
     "android": {
       "package": "com.deva.marketcalculatormaster",
       "icon": "./assets/images/icon.png"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "fb4a5ab7-a78a-4ff5-96b9-4aa151feded9"
+      }
     }
   }
 }
