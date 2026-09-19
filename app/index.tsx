@@ -1049,9 +1049,10 @@ if (selectedMarketId === null) {
               )}
 
               <AuditReport
-                records={records}
-                pattern={market.pattern}
-                onGreyPress={() => {
+  records={records}
+  pattern={market.pattern}
+  calculationMode={calculationMode}
+  onGreyPress={() => {
                   setTimeout(() => {
                     mainScrollRef.current?.scrollTo({
                       y: 520,

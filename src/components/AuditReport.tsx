@@ -2,14 +2,17 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useState } from "react";
 import { TraversalRecord } from "../domain/traversal";
 import { Pattern } from "../domain/markets";
+import { CalculationMode } from "../domain/calculation";
 
 export function AuditReport({
   records,
   pattern,
+  calculationMode,
   onGreyPress,
 }: {
   records: TraversalRecord[];
   pattern: Pattern;
+  calculationMode: CalculationMode;
   onGreyPress?: () => void;
 }) {
 const [openGroups, setOpenGroups] = useState<Record<number, boolean>>({});
@@ -247,12 +250,17 @@ records.forEach((record, originalIndex) => {
                                   if (!/^\d{2}$/.test(day.mainValue)) return "";
                                   const openDigit = Number(day.mainValue[0]);
                                   const closeDigit = Number(day.mainValue[1]);
-                                  const directDigit = line.directLastDigit;
-                                  const directOpen = directDigit === openDigit;
-                                  const directClose = directDigit === closeDigit;
-                                  if (directOpen && directClose) return day.isFourthDay ? "Open + Close • Direct" : "Open + Close";
-                                  if (directOpen) return day.isFourthDay ? "Open • Direct" : "Open";
-                                  if (directClose) return day.isFourthDay ? "Close • Direct" : "Close";
+                                  const matchDigit =
+  calculationMode === "FOUR_DAYS_OPPOSITE" && day.isFourthDay
+    ? line.oppositeLastDigit
+    : line.directLastDigit;
+const matchOpen = matchDigit === openDigit;
+const matchClose = matchDigit === closeDigit;
+const opposite =
+  calculationMode === "FOUR_DAYS_OPPOSITE" && day.isFourthDay;
+                                  if (matchOpen && matchClose) return opposite ? "Open + Close • Opposite" : "Open + Close";
+if (matchOpen) return opposite ? "Open • Opposite" : "Open";
+if (matchClose) return opposite ? "Close • Opposite" : "Close";
                                   return "";
                                 })()}
                                 {line.skipReason ? ` (${line.skipReason})` : ""}
@@ -482,7 +490,7 @@ records.forEach((record, originalIndex) => {
                                         ⚠ No Common Criteria
                                       </Text>
                                     ) : null}
-                                    {isIncompleteBranch && record.prediction && (
+                                    {calculationMode !== "THREE_DAYS" && isIncompleteBranch && record.prediction && (
                                       <View
                                         style={{
                                           marginTop: 10,
@@ -707,42 +715,48 @@ records.forEach((record, originalIndex) => {
                                                               const openDigit = Number(day.mainValue[0]);
                                                               const closeDigit = Number(day.mainValue[1]);
 
-                                                              const directDigit = line.directLastDigit;
+                                                              const matchDigit =
+  calculationMode === "FOUR_DAYS_OPPOSITE" && day.isFourthDay
+    ? line.oppositeLastDigit
+    : line.directLastDigit;
 
-                                                              const directOpen = directDigit === openDigit;
-                                                              const directClose = directDigit === closeDigit;
+const matchOpen = matchDigit === openDigit;
+const matchClose = matchDigit === closeDigit;
+
+const opposite =
+  calculationMode === "FOUR_DAYS_OPPOSITE" && day.isFourthDay;
 
                                                               // First 3 valid days
-                                                              if (!day.isFourthDay) {
-                                                                if (directOpen && directClose) {
-                                                                  return "Open + Close";
-                                                                }
+                                                              if (!day.isFourthDay || calculationMode !== "FOUR_DAYS_OPPOSITE") {
+  if (matchOpen && matchClose) {
+    return "Open + Close";
+  }
 
-                                                                if (directOpen) {
-                                                                  return "Open";
-                                                                }
+  if (matchOpen) {
+    return "Open";
+  }
 
-                                                                if (directClose) {
-                                                                  return "Close";
-                                                                }
+  if (matchClose) {
+    return "Close";
+  }
 
-                                                                return "";
-                                                              }
+  return "";
+}
 
                                                               // Fourth valid day
-                                                              if (directOpen && directClose) {
-                                                                return "Open + Close • Direct";
-                                                              }
+                                                              if (matchOpen && matchClose) {
+  return opposite ? "Open + Close • Opposite" : "Open + Close";
+}
 
-                                                              if (directOpen) {
-                                                                return "Open • Direct";
-                                                              }
+if (matchOpen) {
+  return opposite ? "Open • Opposite" : "Open";
+}
 
-                                                              if (directClose) {
-                                                                return "Close • Direct";
-                                                              }
+if (matchClose) {
+  return opposite ? "Close • Opposite" : "Close";
+}
 
-                                                              return "";
+return "";
                                                             })()}
 
                                                             {line.skipReason
@@ -831,23 +845,29 @@ records.forEach((record, originalIndex) => {
                                                     const openDigit = Number(day.mainValue[0]);
                                                     const closeDigit = Number(day.mainValue[1]);
 
-                                                    const directDigit = line.directLastDigit;
+                                                    const matchDigit =
+  calculationMode === "FOUR_DAYS_OPPOSITE" && day.isFourthDay
+    ? line.oppositeLastDigit
+    : line.directLastDigit;
 
-                                                    const directOpen = directDigit === openDigit;
-                                                    const directClose = directDigit === closeDigit;
+const matchOpen = matchDigit === openDigit;
+const matchClose = matchDigit === closeDigit;
+
+const opposite =
+  calculationMode === "FOUR_DAYS_OPPOSITE" && day.isFourthDay;
 
                                                     // First 3 valid days:
                                                     // Show only Open / Close
                                                     if (!day.isFourthDay) {
-                                                      if (directOpen && directClose) {
+                                                      if (matchOpen && matchClose) {
                                                         return "Open + Close";
                                                       }
 
-                                                      if (directOpen) {
+                                                      if (matchOpen) {
                                                         return "Open";
                                                       }
 
-                                                      if (directClose) {
+                                                      if (matchClose) {
                                                         return "Close";
                                                       }
 
@@ -856,19 +876,19 @@ records.forEach((record, originalIndex) => {
 
                                                     // Fourth valid day:
                                                     // Show Open/Close + Direct
-                                                    if (directOpen && directClose) {
-                                                      return "Open + Close • Direct";
-                                                    }
+                                                    if (matchOpen && matchClose) {
+  return opposite ? "Open + Close • Opposite" : "Open + Close";
+}
 
-                                                    if (directOpen) {
-                                                      return "Open • Direct";
-                                                    }
+if (matchOpen) {
+  return opposite ? "Open • Opposite" : "Open";
+}
 
-                                                    if (directClose) {
-                                                      return "Close • Direct";
-                                                    }
+if (matchClose) {
+  return opposite ? "Close • Opposite" : "Close";
+}
 
-                                                    return "";
+return "";
                                                   })()}
 
                                                   {line.skipReason ? ` (${line.skipReason})` : ""}
