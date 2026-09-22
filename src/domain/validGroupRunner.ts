@@ -3,15 +3,16 @@ import {
   evaluateDay,
   evaluateThreeDayGroup,
   evaluateFourDayGroup,
-  getThreeDayCommonCriteria,
+  getCommonCriteria,
 } from "./calculation";
 import { Pattern } from "./markets";
+import { nextMainCell } from "./mainCellCalendar";
 import {
   resolveSequenceForMain,
   resolveSequenceForStart,
   nextStartCells,
 } from "./sequenceResolver";
-import { selectThreeValidDays, selectFourBranchDays, selectFourValidDays } from "./validDays";
+import { selectThreeValidDays, selectThreeBranchDays, selectFourBranchDays, selectFourValidDays } from "./validDays";
 import { CellValues, GroupAudit, SequenceTemplate } from "./types";
 
 export type FourthDayPredictionLine = {
@@ -21,6 +22,7 @@ export type FourthDayPredictionLine = {
   values: CellValues[string][];
   total?: number;
   directLastDigit?: number;
+  oppositeLastDigit?: number;
   missingCells: string[];
 };
 
@@ -28,6 +30,10 @@ export type FourthDayPrediction = {
   mainCell: string;
   commonCriteria: number[];
   lines: FourthDayPredictionLine[];
+  targets?: Array<{
+    mainCell: string;
+    lines: FourthDayPredictionLine[];
+  }>;
 };
 
 export type ValidGroupRun =
@@ -48,35 +54,36 @@ export type ValidGroupRun =
       skippedMainCells: string[];
     };
 const asMainText = (value: CellValues[string] | undefined) => typeof value === "number" ? String(value) : value ?? "";
+const calculationModeDayCount = (mode: CalculationMode) => mode === "THREE_DAYS" ? 3 : 4;
 
-function buildFourthDayPrediction(
+function buildTargetPrediction(
   pattern: Pattern,
   templates: SequenceTemplate[],
   values: CellValues,
-  cellOrder: string[],
   partialDays: ReturnType<typeof evaluateDay>[],
-  fourthMainCell: string,
-  fourthStartCell: string
+  targetMainCell: string,
+  targetStartCell: string
 ): FourthDayPrediction | undefined {
-  if (partialDays.length !== 3) {
+  if (partialDays.length < 2) {
     return undefined;
   }
 
   const commonCriteria =
-    getThreeDayCommonCriteria(partialDays);
+    getCommonCriteria(partialDays);
 
   if (!commonCriteria.length) {
     return {
-      mainCell: fourthMainCell,
+      mainCell: targetMainCell,
       commonCriteria: [],
       lines: [],
+      targets: [{ mainCell: targetMainCell, lines: [] }],
     };
   }
 
   const sequence = resolveSequenceForStart(
     pattern,
     templates,
-    fourthStartCell
+    targetStartCell
   );
 
   const relevantLines = sequence.filter((item) =>
@@ -123,6 +130,7 @@ function buildFourthDayPrediction(
       );
 
       const directLastDigit = total % 10;
+      const oppositeLastDigit = (directLastDigit + 5) % 10;
 
       return {
         criteria: item.criteria,
@@ -131,14 +139,16 @@ function buildFourthDayPrediction(
         values: rawValues,
         total,
         directLastDigit,
+        oppositeLastDigit,
         missingCells: [],
       };
     });
 
   return {
-    mainCell: fourthMainCell,
+    mainCell: targetMainCell,
     commonCriteria,
     lines,
+    targets: [{ mainCell: targetMainCell, lines }],
   };
 }
 
@@ -181,7 +191,7 @@ export function runRootValidGroup(pattern: Pattern, templates: SequenceTemplate[
 export function runBranchValidGroup(pattern: Pattern, templates: SequenceTemplate[], values: CellValues, cellOrder: string[], firstMainCell: string, firstStartCell: string, expectedCriteria?: number, mode: CalculationMode = "FOUR_DAYS_DIRECT"): ValidGroupRun {
   const selection =
     mode === "THREE_DAYS"
-      ? selectThreeValidDays(pattern, values, firstMainCell, firstStartCell)
+      ? selectThreeBranchDays(pattern, values, firstMainCell, firstStartCell)
       : selectFourBranchDays(pattern, values, firstMainCell, firstStartCell);
   if (selection.stopped) {
     return {
@@ -218,21 +228,32 @@ export function runBranchValidGroup(pattern: Pattern, templates: SequenceTemplat
     }
 
     const prediction =
-      mode !== "THREE_DAYS" && partialDays.length === 3
-        ? buildFourthDayPrediction(
+      partialDays.length >= 2
+        ? buildTargetPrediction(
             pattern,
             templates,
             values,
-            cellOrder,
             partialDays,
             selection.waitingFor,
             nextStartCells(
               pattern,
               firstStartCell,
-              4
-            )[3]
+              calculationModeDayCount(mode)
+            )[partialDays.length]
           )
         : undefined;
+
+    if (prediction && mode !== "THREE_DAYS" && partialDays.length === 2) {
+      const fourthPrediction = buildTargetPrediction(
+        pattern,
+        templates,
+        values,
+        partialDays,
+        nextMainCell(pattern, selection.waitingFor),
+        nextStartCells(pattern, firstStartCell, 4)[3]
+      );
+      if (fourthPrediction) prediction.targets = [...(prediction.targets ?? []), ...(fourthPrediction.targets ?? [])];
+    }
 
     return {
       status: "WAITING",

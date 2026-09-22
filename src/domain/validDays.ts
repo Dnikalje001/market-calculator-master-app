@@ -76,6 +76,21 @@ export function selectFourValidDays(pattern: Pattern, values: CellValues, firstM
  * Unlike root groups, a branch does not skip an invalid/asterisk main cell
  * to search for a later valid day.
  */
+export function selectThreeBranchDays(pattern: Pattern, values: CellValues, firstMainCell: string, firstStartCell: string): ValidDaySelection {
+  let mainCell = firstMainCell.toUpperCase();
+  let startCell = firstStartCell.toUpperCase();
+  const days: ValidDay[] = [];
+  const skippedMainCells: string[] = [];
+  while (days.length < 3) {
+    const value = values[mainCell];
+    if (value === "*") return { days, skippedMainCells: [...skippedMainCells, mainCell], stopped: true };
+    if (!twoDigits(value)) return { days, skippedMainCells, waitingFor: mainCell };
+    days.push({ mainCell, startCell });
+    mainCell = nextMainCell(pattern, mainCell);
+    startCell = nextStartCells(pattern, startCell, 2)[1];
+  }
+  return { days, skippedMainCells };
+}
 export function selectFourBranchDays(
   pattern: Pattern,
   values: CellValues,

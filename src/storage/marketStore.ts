@@ -17,7 +17,7 @@ const globalRowDatesKey = "market-calculator:row-dates:global";
 const configKey = (marketId: string) => `market-calculator:config:${marketId}`;
 const checkpointKey = (marketId: string, mode: CalculationMode) => `market-calculator:checkpoint:${marketId}:${mode}`;
 const patternConfigKey = (pattern: Pattern) => `market-calculator:pattern-config:${pattern}`;
-const historyKey = (marketId: string) => `market-calculator:history:${marketId}`;
+const historyKey = (marketId: string, mode: CalculationMode) => `market-calculator:history:${marketId}:${mode}`;
 
 const chartHighlightCacheKey = (marketId: string) =>
   `market-calculator:chart-highlight-cache:${marketId}`;
@@ -109,17 +109,17 @@ export async function loadCheckpoint(marketId: string, mode: CalculationMode): P
   return raw ? JSON.parse(raw) : null;
 }
 
-export async function loadCalculationHistory(marketId: string): Promise<CalculationHistoryEntry[]> {
-  const raw = await AsyncStorage.getItem(historyKey(marketId));
+export async function loadCalculationHistory(marketId: string, mode: CalculationMode): Promise<CalculationHistoryEntry[]> {
+  const raw = await AsyncStorage.getItem(historyKey(marketId, mode));
   return raw ? JSON.parse(raw) : [];
 }
 
-export async function saveCalculationHistory(marketId: string, entries: CalculationHistoryEntry[]) {
-  await AsyncStorage.setItem(historyKey(marketId), JSON.stringify(entries));
+export async function saveCalculationHistory(marketId: string, mode: CalculationMode, entries: CalculationHistoryEntry[]) {
+  await AsyncStorage.setItem(historyKey(marketId, mode), JSON.stringify(entries));
 }
 
-export async function clearCalculationHistory(marketId: string) {
-  await AsyncStorage.removeItem(historyKey(marketId));
+export async function clearCalculationHistory(marketId: string, mode: CalculationMode) {
+  await AsyncStorage.removeItem(historyKey(marketId, mode));
 }
 
 export async function saveCalculationInputs(

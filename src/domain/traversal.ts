@@ -11,7 +11,7 @@ import {
 import { CellValues, GroupAudit, SequenceTemplate } from "./types";
 
 export type BranchTask = {
-  criteria: number;
+  criteria?: number;
   firstMainCell: string;
   firstStartCell: string;
   ancestry: number[];
@@ -153,6 +153,6 @@ export function runFinalPatternFromBranch(
   return runFinalPattern(pattern, templates, values, cellOrder, firstMainCell, maxGroups, {
     rootMainCell: firstMainCell.toUpperCase(),
     rootResolved: true,
-    pendingBranches: [{ criteria: 0, firstMainCell: firstMainCell.toUpperCase(), firstStartCell: firstStartCell.toUpperCase(), ancestry: [] }]
+    pendingBranches: [{ firstMainCell: firstMainCell.toUpperCase(), firstStartCell: firstStartCell.toUpperCase(), ancestry: [] }]
   }, mode);
 }

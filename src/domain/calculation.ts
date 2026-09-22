@@ -99,6 +99,13 @@ export function evaluateFourDayGroup(days: DayAudit[]): GroupAudit {
   return { days, commonCriteria };
 }
 
+export function getCommonCriteria(days: DayAudit[]): number[] {
+  if (days.length === 0) return [];
+  return days[0].matchingCriteria
+    .filter((criteria) => days.every((day) => day.matchingCriteria.includes(criteria)))
+    .sort((a, b) => a - b);
+}
+
 export function getThreeDayCommonCriteria(
   days: DayAudit[]
 ): number[] {

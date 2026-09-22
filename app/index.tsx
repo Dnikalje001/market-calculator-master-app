@@ -158,7 +158,7 @@ export default function Home() {
       }
     });
     //clearCalculationHistory(marketId);
-    //loadCalculationHistory(marketId).then(setHistory);
+    loadCalculationHistory(marketId, calculationMode).then(setHistory);
     setEntryCell("");
     setEntryValue("");
     setSaveMessage("");
@@ -226,7 +226,7 @@ export default function Home() {
     const nextCheckpoint: CalculationCheckpoint = {
       status: result.status === "WAITING" ? "WAITING_FOR_VALUES" : "COMPLETE",
       nextMainCell: result.waitingFor,
-      activeCriteria: result.state.pendingBranches.map((branch) => branch.criteria),
+      activeCriteria: result.state.pendingBranches.flatMap((branch) => branch.criteria === undefined ? [] : [branch.criteria]),
       activeBranchStarts: result.state.pendingBranches.map((branch) => branch.firstStartCell),
       reason: result.status === "WAITING" ? "MISSING_MAIN_CELL" : undefined,
       rootMainCell: result.state.rootMainCell,
@@ -248,7 +248,7 @@ export default function Home() {
 
     const updatedHistory = [entry];
 
-    await saveCalculationHistory(marketId, updatedHistory);
+    await saveCalculationHistory(marketId, calculationMode, updatedHistory);
     setHistory(updatedHistory);
     setActiveHistoryId(historyId);
     if (result.status === "WAITING") setCalculationMessage(`Calculation ${result.waitingFor} येथे थांबली आहे. त्या main cellची two-digit value save केली की ती आपोआप पुढे चालू होईल.`);
@@ -1036,7 +1036,7 @@ if (selectedMarketId === null) {
 
               <Text style={styles.note}>
                 Run केल्यानंतर प्रत्येक Criteria, Sub-Criteria, तीन cell numbers,
-                values, total, last digit, +5 check, Match/Skip आणि common Criteria
+                values, total, last digit, {calculationMode === "FOUR_DAYS_OPPOSITE" ? "+5 check, " : ""}Match/Skip आणि common Criteria
                 दिसतील.
               </Text>
 
@@ -1052,6 +1052,7 @@ if (selectedMarketId === null) {
   records={records}
   pattern={market.pattern}
   calculationMode={calculationMode}
+  checkpoint={checkpoint}
   onGreyPress={() => {
                   setTimeout(() => {
                     mainScrollRef.current?.scrollTo({

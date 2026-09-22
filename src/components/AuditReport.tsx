@@ -2,17 +2,20 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useState } from "react";
 import { TraversalRecord } from "../domain/traversal";
 import { Pattern } from "../domain/markets";
+import { CalculationCheckpoint } from "../domain/types";
 import { CalculationMode } from "../domain/calculation";
 
 export function AuditReport({
   records,
   pattern,
   calculationMode,
+  checkpoint,
   onGreyPress,
 }: {
   records: TraversalRecord[];
   pattern: Pattern;
   calculationMode: CalculationMode;
+  checkpoint: CalculationCheckpoint | null;
   onGreyPress?: () => void;
 }) {
 const [openGroups, setOpenGroups] = useState<Record<number, boolean>>({});
@@ -32,6 +35,8 @@ const [statusFilter, setStatusFilter] = useState<
 >("ALL");
 
 const expectedDayCount = calculationMode === "THREE_DAYS" ? 3 : 4;
+const hasPendingBranch = checkpoint?.status === "WAITING_FOR_VALUES" && (checkpoint.pendingBranches?.length ?? 0) > 0;
+const activePendingBranch = hasPendingBranch ? checkpoint?.pendingBranches?.[0] : undefined;
 
 
 const groupedRecords: {
@@ -94,6 +99,40 @@ records.forEach((record, originalIndex) => {
     return true;
   };
 
+  const getProgressionResult = (
+    day: TraversalRecord["audit"]["days"][number],
+    line: TraversalRecord["audit"]["days"][number]["lines"][number]
+  ) => {
+    if (!/^\d{2}$/.test(day.mainValue)) return "";
+
+    const openDigit = Number(day.mainValue[0]);
+    const closeDigit = Number(day.mainValue[1]);
+
+    const matchDigit =
+      calculationMode === "FOUR_DAYS_OPPOSITE" && day.isFourthDay
+        ? line.oppositeLastDigit
+        : line.directLastDigit;
+
+    if (matchDigit === openDigit && matchDigit === closeDigit) {
+      return calculationMode === "FOUR_DAYS_OPPOSITE" && day.isFourthDay
+        ? "Open + Close • Opposite"
+        : "Open + Close";
+    }
+
+    if (matchDigit === openDigit) {
+      return calculationMode === "FOUR_DAYS_OPPOSITE" && day.isFourthDay
+        ? "Open • Opposite"
+        : "Open";
+    }
+
+    if (matchDigit === closeDigit) {
+      return calculationMode === "FOUR_DAYS_OPPOSITE" && day.isFourthDay
+        ? "Close • Opposite"
+        : "Close";
+    }
+
+    return "";
+  };
   if (!records.length) return <Text style={styles.empty}>Calculation run केल्यानंतर पूर्ण audit येथे दिसेल.</Text>;
   return (
     <View style={styles.wrap}>
@@ -128,22 +167,26 @@ records.forEach((record, originalIndex) => {
 
 
       {groupedRecords.map((group, groupIndex) => {
+        const isPendingRootFamily = hasPendingBranch && groupIndex === groupedRecords.length - 1;
         const greenRootNumber =
           groupedRecords
             .slice(0, groupIndex + 1)
             .filter((item) =>
               item.root?.record.audit.days.length === expectedDayCount &&
-              item.root.record.audit.commonCriteria.length > 0
+              item.root.record.audit.commonCriteria.length > 0 &&
+              !(hasPendingBranch && groupedRecords.indexOf(item) === groupedRecords.length - 1)
             ).length;
 
         const visibleBranches = group.branches.filter(({ record }) =>
-          matchesStatusFilter(record)
+          statusFilter === "GREY" && isPendingRootFamily
+            ? !!record.branch && (record.branch.ancestry ?? []).every((criteria, index) => activePendingBranch?.ancestry?.[index] === criteria)
+            : matchesStatusFilter(record)
         );
 
         const visibleRoot =
           group.root &&
-          (matchesStatusFilter(group.root.record) ||
-            (statusFilter === "GREY" && visibleBranches.length > 0))
+          ((!(statusFilter === "GREEN" && isPendingRootFamily) && matchesStatusFilter(group.root.record)) ||
+            (statusFilter === "GREY" && (visibleBranches.length > 0 || isPendingRootFamily)))
             ? group.root
             : null;
 
@@ -189,10 +232,11 @@ records.forEach((record, originalIndex) => {
               <Text
                 style={[
                   styles.heading,
+                  !(statusFilter === "GREY" && isPendingRootFamily) &&
                   visibleRoot?.record.audit.days.length === expectedDayCount &&
                   visibleRoot.record.audit.commonCriteria.length > 0
                     ? styles.headingGreen
-                    : visibleRoot?.record.audit.days.length === expectedDayCount
+                    : !(statusFilter === "GREY" && isPendingRootFamily) && visibleRoot?.record.audit.days.length === expectedDayCount
                       ? styles.headingRed
                       : styles.headingNeutral,
                 ]}
@@ -292,13 +336,15 @@ if (matchClose) return opposite ? "Close • Opposite" : "Close";
                 {Array.from(branchFamilies.entries()).map(
                   ([criteria, familyRecords]) => {
                     const displayGroups =
-                      statusFilter === "GREY"
-                        ? familyRecords.filter(
-                            ({ record }) => record.audit.days.length < expectedDayCount
-                          )
-                        : familyRecords.filter(
-                            ({ record }) => record.audit.days.length === expectedDayCount
-                          );
+                      statusFilter === "GREY" && isPendingRootFamily
+                        ? familyRecords
+                        : statusFilter === "GREY"
+                          ? familyRecords.filter(
+                              ({ record }) => record.audit.days.length < expectedDayCount
+                            )
+                          : familyRecords.filter(
+                              ({ record }) => record.audit.days.length === expectedDayCount
+                            );
 
                     const groupCount = displayGroups.length;
 
@@ -492,7 +538,87 @@ if (matchClose) return opposite ? "Close • Opposite" : "Close";
                                         ⚠ No Common Criteria
                                       </Text>
                                     ) : null}
-                                    {calculationMode !== "THREE_DAYS" && isIncompleteBranch && record.prediction && (
+                                    {isIncompleteBranch && record.branch && record.audit.days.length > 0 && (
+  <View
+    style={{
+      marginTop: 10,
+      padding: 10,
+      borderWidth: 1,
+      borderColor: "#d9e2ec",
+      borderRadius: 8,
+      backgroundColor: "#ffffff",
+    }}
+  >
+    <Text
+      style={{
+        fontWeight: "800",
+        fontSize: 13,
+        color: "#334e68",
+        marginBottom: 8,
+      }}
+    >
+      Progression • C{record.branch.criteria}
+    </Text>
+
+    {record.audit.days.map((day, dayIndex) => {
+      const branchCriteria = record.branch?.criteria;
+
+      const matchingLines = day.lines.filter(
+        (line) =>
+          line.status === "MATCH" &&
+          branchCriteria !== undefined &&
+          line.criteria === branchCriteria
+      );
+
+      return (
+        <View
+          key={`progression-${day.mainCell}-${dayIndex}`}
+          style={{
+            borderTopWidth: dayIndex === 0 ? 0 : 1,
+            borderTopColor: "#edf2f7",
+            paddingVertical: 6,
+          }}
+        >
+          <Text style={{ fontWeight: "700", fontSize: 12 }}>
+            Day {dayIndex + 1}: {day.mainCell} = {day.mainValue}
+          </Text>
+
+          {matchingLines.length > 0 ? (
+            matchingLines.map((line, lineIndex) => (
+              <View
+                key={`progression-line-${day.mainCell}-${line.criteria}-${line.subCriteria}-${lineIndex}`}
+                style={{
+                  marginTop: 4,
+                  paddingLeft: 8,
+                }}
+              >
+                <Text style={styles.detail}>
+                  C{line.criteria}-SC{line.subCriteria}
+                  {" • "}
+                  Digit:{" "}
+                  {calculationMode === "FOUR_DAYS_OPPOSITE" &&
+                  day.isFourthDay
+                    ? line.oppositeLastDigit ?? "-"
+                    : line.directLastDigit ?? "-"}
+                </Text>
+
+                <Text style={styles.detail}>
+                  Result: {getProgressionResult(day, line) || "-"}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.detail}>
+              No matching C{branchCriteria} line
+            </Text>
+          )}
+        </View>
+      );
+    })}
+  </View>
+)}
+
+{isIncompleteBranch && record.prediction && (
                                       <View
                                         style={{
                                           marginTop: 10,
@@ -505,23 +631,12 @@ if (matchClose) return opposite ? "Close • Opposite" : "Close";
                                       >
                                         <Text
                                           style={{
-                                            fontWeight: "800",
-                                            fontSize: 14,
-                                            color: "#334155",
-                                          }}
-                                        >
-                                          4th Main Cell Prediction • {record.prediction.mainCell}
-                                        </Text>
-
-                                        <Text
-                                          style={{
-                                            marginTop: 5,
                                             fontWeight: "700",
                                             fontSize: 13,
                                             color: "#52616b",
                                           }}
                                         >
-                                          3-Day Common Criteria:{" "}
+                                          Common Criteria:{" "}
                                           {record.prediction.commonCriteria.length
                                             ? record.prediction.commonCriteria
                                                 .map((criteria) => `C${criteria}`)
@@ -529,71 +644,98 @@ if (matchClose) return opposite ? "Close • Opposite" : "Close";
                                             : "None"}
                                         </Text>
 
-                                        {record.prediction.lines.map((line, index) => (
+                                        {(record.prediction.targets ?? [
+                                          {
+                                            mainCell: record.prediction.mainCell,
+                                            lines: record.prediction.lines,
+                                          },
+                                        ]).map((target, targetIndex) => (
                                           <View
-                                            key={`prediction-${line.criteria}-${line.subCriteria}-${index}`}
+                                            key={`prediction-target-${target.mainCell}-${targetIndex}`}
                                             style={{
                                               marginTop: 10,
-                                              paddingTop: 8,
-                                              borderTopWidth: 1,
-                                              borderTopColor: "#e2e8f0",
+                                              paddingTop: targetIndex === 0 ? 0 : 10,
+                                              borderTopWidth: targetIndex === 0 ? 0 : 1,
+                                              borderTopColor: "#cbd5e1",
                                             }}
                                           >
                                             <Text
                                               style={{
                                                 fontWeight: "800",
-                                                fontSize: 13,
+                                                fontSize: 14,
+                                                color: "#334155",
                                               }}
                                             >
-                                              C{line.criteria}-SC{line.subCriteria}
+                                              Prediction â€¢ {target.mainCell}
                                             </Text>
 
-                                            <Text style={styles.detail}>
-                                              Cells: {line.references.join(" → ")}
-                                            </Text>
-
-                                            <Text style={styles.detail}>
-                                              Values:{" "}
-                                              {line.references
-                                                .map((reference, valueIndex) => {
-                                                  const value = line.values[valueIndex];
-
-                                                  return `${reference}=${
-                                                    value === "" || value === undefined
-                                                      ? "?"
-                                                      : value
-                                                  }`;
-                                                })
-                                                .join(" • ")}
-                                            </Text>
-
-                                            {line.missingCells.length > 0 ? (
-                                              <Text
+                                            {target.lines.map((line, index) => (
+                                              <View
+                                                key={`prediction-${target.mainCell}-${line.criteria}-${line.subCriteria}-${index}`}
                                                 style={{
-                                                  marginTop: 3,
-                                                  fontWeight: "700",
-                                                  color: "#52616b",
+                                                  marginTop: 10,
+                                                  paddingTop: 8,
+                                                  borderTopWidth: 1,
+                                                  borderTopColor: "#e2e8f0",
                                                 }}
                                               >
-                                                Waiting for: {line.missingCells.join(", ")}
-                                              </Text>
-                                            ) : (
-                                              <>
-                                                <Text style={styles.detail}>
-                                                  Total: {line.total}
-                                                </Text>
-
                                                 <Text
                                                   style={{
-                                                    marginTop: 3,
                                                     fontWeight: "800",
                                                     fontSize: 13,
                                                   }}
                                                 >
-                                                  Possible Digit: {line.directLastDigit}
+                                                  C{line.criteria}-SC{line.subCriteria}
                                                 </Text>
-                                              </>
-                                            )}
+
+                                                <Text style={styles.detail}>
+                                                  Cells: {line.references.join(" â†’ ")}
+                                                </Text>
+
+                                                <Text style={styles.detail}>
+                                                  Values:{" "}
+                                                  {line.references
+                                                    .map((reference, valueIndex) => {
+                                                      const value = line.values[valueIndex];
+
+                                                      return `${reference}=${
+                                                        value === "" || value === undefined
+                                                          ? "?"
+                                                          : value
+                                                      }`;
+                                                    })
+                                                    .join(" â€¢ ")}
+                                                </Text>
+
+                                                {line.missingCells.length > 0 ? (
+                                                  <Text
+                                                    style={{
+                                                      marginTop: 3,
+                                                      fontWeight: "700",
+                                                      color: "#52616b",
+                                                    }}
+                                                  >
+                                                    Waiting for: {line.missingCells.join(", ")}
+                                                  </Text>
+                                                ) : (
+                                                  <>
+                                                    <Text style={styles.detail}>
+                                                      Total: {line.total}
+                                                    </Text>
+
+                                                    <Text
+                                                      style={{
+                                                        marginTop: 3,
+                                                        fontWeight: "800",
+                                                        fontSize: 13,
+                                                      }}
+                                                    >
+                                                      Possible Digit: {calculationMode === "FOUR_DAYS_OPPOSITE" && record.audit.days.length + targetIndex === 3 ? line.oppositeLastDigit : line.directLastDigit}
+                                                    </Text>
+                                                  </>
+                                                )}
+                                              </View>
+                                            ))}
                                           </View>
                                         ))}
                                       </View>

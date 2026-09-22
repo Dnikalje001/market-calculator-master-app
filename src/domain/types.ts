@@ -53,6 +53,6 @@ export type CalculationCheckpoint = {
   reason?: "MISSING_MAIN_CELL" | "MISSING_REFERENCE_VALUE" | "ASTERISK" | "NO_COMMON_CRITERIA";
   rootMainCell?: string;
   rootResolved?: boolean;
-  pendingBranches?: Array<{ criteria: number; firstMainCell: string; firstStartCell: string; ancestry: number[] }>;
+  pendingBranches?: Array<{ criteria?: number; firstMainCell: string; firstStartCell: string; ancestry: number[] }>;
   updatedAt: string;
 };
