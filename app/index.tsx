@@ -221,7 +221,7 @@ export default function Home() {
     };
 
     setChartHighlightCache(newChartHighlightCache);
-    await saveChartHighlightCache(marketId, newChartHighlightCache);
+    try { await saveChartHighlightCache(marketId, newChartHighlightCache); } catch (error) { throw new Error(`Chart Cache save failed: ${error instanceof Error ? error.message : String(error)}`); }
 
     const nextCheckpoint: CalculationCheckpoint = {
       status: result.status === "WAITING" ? "WAITING_FOR_VALUES" : "COMPLETE",
@@ -234,7 +234,7 @@ export default function Home() {
       pendingBranches: result.state.pendingBranches,
       updatedAt: new Date().toISOString()
     };
-    await saveCheckpoint(marketId, calculationMode, nextCheckpoint);
+    try { await saveCheckpoint(marketId, calculationMode, nextCheckpoint); } catch (error) { throw new Error(`Checkpoint save failed: ${error instanceof Error ? error.message : String(error)}`); }
     setCheckpoint(nextCheckpoint);
     const historyId =
       append && activeHistoryId ? activeHistoryId : `${Date.now()}`;
@@ -248,7 +248,7 @@ export default function Home() {
 
     const updatedHistory = [entry];
 
-    await saveCalculationHistory(marketId, calculationMode, updatedHistory);
+    try { await saveCalculationHistory(marketId, calculationMode, updatedHistory); } catch (error) { throw new Error(`History save failed: ${error instanceof Error ? error.message : String(error)}`); }
     setHistory(updatedHistory);
     setActiveHistoryId(historyId);
     if (result.status === "WAITING") setCalculationMessage(`Calculation ${result.waitingFor} येथे थांबली आहे. त्या main cellची two-digit value save केली की ती आपोआप पुढे चालू होईल.`);
