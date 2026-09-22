@@ -310,6 +310,7 @@ export default function Home() {
   };
 
   const runCalculation = async () => {
+    try {
     const cell = mainCell.trim().toUpperCase();
     const value = mainValue.trim();
 
@@ -318,7 +319,7 @@ export default function Home() {
       return;
     }
 
-    setCalculationMessage(`Validation passed: ${cell} = ${value}`);
+    setCalculationMessage(`Calculation सुरू आहे: ${cell} = ${value}`);
 
     await saveCalculationInputs(
       marketId,
@@ -368,6 +369,11 @@ export default function Home() {
       false,
       startMode === "branch" ? branchStart : undefined
     );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("Calculation error:", error);
+      setCalculationMessage(`Calculation error: ${message}`);
+    }
   };
 
   const saveBatchValues = async () => {
