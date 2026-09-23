@@ -106,11 +106,7 @@ export function selectFourBranchDays(
     const value = values[mainCell]
 
     if (value === "*") {
-      return {
-        days,
-        skippedMainCells: [...skippedMainCells, mainCell],
-        stopped: true,
-      }
+      skippedMainCells.push(mainCell)
     } else if (twoDigits(value)) {
       days.push({
         mainCell,

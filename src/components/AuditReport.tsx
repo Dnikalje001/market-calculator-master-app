@@ -666,7 +666,7 @@ if (matchClose) return opposite ? "Close • Opposite" : "Close";
                                                 color: "#334155",
                                               }}
                                             >
-                                              Prediction â€¢ {target.mainCell}
+                                              Prediction • {target.mainCell}
                                             </Text>
 
                                             {target.lines.map((line, index) => (
@@ -689,7 +689,7 @@ if (matchClose) return opposite ? "Close • Opposite" : "Close";
                                                 </Text>
 
                                                 <Text style={styles.detail}>
-                                                  Cells: {line.references.join(" â†’ ")}
+                                                  Cells: {line.references.join(" → ")}
                                                 </Text>
 
                                                 <Text style={styles.detail}>
