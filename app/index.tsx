@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   BackHandler,
   Pressable,
   SafeAreaView,
@@ -189,7 +190,9 @@ export default function Home() {
     const combinedRecords = append
       ? [...previousRecords, ...result.records]
       : result.records;
+
     setRecords(combinedRecords);
+
 
     const referenceCells = new Set<string>();
     const matchedReferenceCells = new Set<string>();
@@ -248,7 +251,7 @@ export default function Home() {
 
     const updatedHistory = [entry];
 
-    try { await saveCalculationHistory(marketId, calculationMode, updatedHistory); } catch (error) { throw new Error(`History save failed: ${error instanceof Error ? error.message : String(error)}`); }
+    try { await saveCalculationHistory(marketId, calculationMode, updatedHistory); } catch (error) { throw new Error(`History save failed (${combinedRecords.length} records / ${new TextEncoder().encode(JSON.stringify(combinedRecords)).length} bytes): ${error instanceof Error ? error.message : String(error)}`); }
     setHistory(updatedHistory);
     setActiveHistoryId(historyId);
     if (result.status === "WAITING") setCalculationMessage(`Calculation ${result.waitingFor} येथे थांबली आहे. त्या main cellची two-digit value save केली की ती आपोआप पुढे चालू होईल.`);
@@ -259,54 +262,91 @@ export default function Home() {
   const saveValue = async () => {
     const cell = entryCell.trim().toUpperCase();
     const value = entryValue.trim();
-    if (!/^[A-Z]+\d+$/.test(cell) || !/^(\d{1,2}|\*)$/.test(value)) {
-      setSaveMessage("Cell number (उदा. G87) आणि 1–2 digits किंवा * भरा.");
+    const validEntryColumns =
+      market.pattern === "FINAL_DAYS_6" ? MAIN_COLUMNS_6 : MAIN_COLUMNS_5;
+    const entryMatch = /^([A-Z]+)(\d+)$/.exec(cell);
+
+    if (
+      !entryMatch ||
+      !validEntryColumns.includes(entryMatch[1]) ||
+      !/^(\d{1,2}|\*)$/.test(value)
+    ) {
+      setSaveMessage(
+        market.pattern === "FINAL_DAYS_6"
+          ? "Valid cell number भरा: B, G, L, Q, V किंवा AA + row number."
+          : "Valid cell number भरा: B, G, L, Q किंवा V + row number."
+      );
       return;
     }
-    const updated: CellValues = {
-      ...savedValues,
-      [cell]: value === "*" ? "*" : value.length === 2 ? value : Number(value),
-    };
 
-    const derived = deriveMainDigits(value);
-    const mainColumn = cell.match(/^[A-Z]+/)?.[0];
-    const rowNumber = cell.match(/\d+$/)?.[0];
+    const existingValue = savedValues[cell];
+    const hasExistingValue = existingValue !== undefined;
 
-    const derivedColumns: Record<string, [string, string, string, string]> = {
-      B: ["C", "D", "E", "F"],
-      G: ["H", "I", "J", "K"],
-      L: ["M", "N", "O", "P"],
-      Q: ["R", "S", "T", "U"],
-      V: ["W", "X", "Y", "Z"],
-      AA: ["AB", "AC", "AD", "AE"],
-    };
-
-    if (mainColumn && rowNumber && derivedColumns[mainColumn]) {
-      const [leftCol, rightCol, totalCol, differenceCol] =
-        derivedColumns[mainColumn];
-
-      if (value === "*") {
-        updated[`${leftCol}${rowNumber}`] = "*";
-        updated[`${rightCol}${rowNumber}`] = "*";
-        updated[`${totalCol}${rowNumber}`] = "*";
-        updated[`${differenceCol}${rowNumber}`] = "*";
-      } else if (derived) {
-        updated[`${leftCol}${rowNumber}`] = derived.left;
-        updated[`${rightCol}${rowNumber}`] = derived.right;
-        updated[`${totalCol}${rowNumber}`] = derived.total;
-        updated[`${differenceCol}${rowNumber}`] = derived.difference;
+    const saveConfirmedValue = async () => {
+      const updated: CellValues = {
+        ...savedValues,
+        [cell]: value === "*" ? "*" : value.length === 2 ? value : Number(value),
+      };
+  
+      const derived = deriveMainDigits(value);
+      const mainColumn = cell.match(/^[A-Z]+/)?.[0];
+      const rowNumber = cell.match(/\d+$/)?.[0];
+  
+      const derivedColumns: Record<string, [string, string, string, string]> = {
+        B: ["C", "D", "E", "F"],
+        G: ["H", "I", "J", "K"],
+        L: ["M", "N", "O", "P"],
+        Q: ["R", "S", "T", "U"],
+        V: ["W", "X", "Y", "Z"],
+        AA: ["AB", "AC", "AD", "AE"],
+      };
+  
+      if (mainColumn && rowNumber && derivedColumns[mainColumn]) {
+        const [leftCol, rightCol, totalCol, differenceCol] =
+          derivedColumns[mainColumn];
+  
+        if (value === "*") {
+          updated[`${leftCol}${rowNumber}`] = "*";
+          updated[`${rightCol}${rowNumber}`] = "*";
+          updated[`${totalCol}${rowNumber}`] = "*";
+          updated[`${differenceCol}${rowNumber}`] = "*";
+        } else if (derived) {
+          updated[`${leftCol}${rowNumber}`] = derived.left;
+          updated[`${rightCol}${rowNumber}`] = derived.right;
+          updated[`${totalCol}${rowNumber}`] = derived.total;
+          updated[`${differenceCol}${rowNumber}`] = derived.difference;
+        }
       }
+      await saveDailyValues(marketId, updated);
+      setSavedValues(updated);
+      setSaveMessage(`${cell} = ${value} offline save झाले.`);
+      const paused = checkpoint ?? await loadCheckpoint(marketId, calculationMode);
+      if (paused?.status === "WAITING_FOR_VALUES" && paused.nextMainCell === cell && value !== "*") {
+        setSaveMessage(`${cell} = ${value} save झाले. Calculation आपोआप पुढे सुरू झाली.`);
+        await performCalculation(updated, paused.rootMainCell ?? cell, paused, true);
+      }
+      setEntryCell("");
+      setEntryValue("");
+    };
+
+    if (hasExistingValue) {
+      Alert.alert(
+        "Value already exists",
+        cell + " already has value " + String(existingValue) + ". Do you want to replace it?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Continue",
+            onPress: () => {
+              void saveConfirmedValue();
+            },
+          },
+        ]
+      );
+      return;
     }
-    await saveDailyValues(marketId, updated);
-    setSavedValues(updated);
-    setSaveMessage(`${cell} = ${value} offline save झाले.`);
-    const paused = checkpoint ?? await loadCheckpoint(marketId, calculationMode);
-    if (paused?.status === "WAITING_FOR_VALUES" && paused.nextMainCell === cell && value !== "*") {
-      setSaveMessage(`${cell} = ${value} save झाले. Calculation आपोआप पुढे सुरू झाली.`);
-      await performCalculation(updated, paused.rootMainCell ?? cell, paused, true);
-    }
-    setEntryCell("");
-    setEntryValue("");
+
+    await saveConfirmedValue();
   };
 
   const runCalculation = async () => {
@@ -316,6 +356,38 @@ export default function Home() {
 
     if (!/^[A-Z]+\d+$/.test(cell) || !/^\d{2}$/.test(value)) {
       setCalculationMessage("Main cell number आणि two-digit value भरा.");
+      return;
+    }
+
+    const validMainColumns =
+      market.pattern === "FINAL_DAYS_6" ? MAIN_COLUMNS_6 : MAIN_COLUMNS_5;
+
+    const mainCellMatch = /^([A-Z]+)(\d+)$/.exec(cell);
+    const startColumn = mainCellMatch?.[1];
+    const startRow = mainCellMatch ? Number(mainCellMatch[2]) : NaN;
+
+    const savedMainRows = Object.keys(savedValues)
+      .map((savedCell) => /^([A-Z]+)(\d+)$/.exec(savedCell.toUpperCase()))
+      .filter(
+        (match): match is RegExpExecArray =>
+          match !== null && validMainColumns.includes(match[1])
+      )
+      .map((match) => Number(match[2]))
+      .filter((row) => Number.isFinite(row));
+
+    const latestRow = savedMainRows.length > 0 ? Math.max(...savedMainRows) : startRow;
+    const earliestAllowedRow = Math.max(1, latestRow - 14);
+
+    if (
+      !startColumn ||
+      !validMainColumns.includes(startColumn) ||
+      !Number.isFinite(startRow) ||
+      startRow < earliestAllowedRow ||
+      startRow > latestRow
+    ) {
+      setCalculationMessage(
+        `Please enter a Main Cell from the latest 15 rows (Row ${earliestAllowedRow} to Row ${latestRow}).`
+      );
       return;
     }
 
@@ -379,18 +451,31 @@ export default function Home() {
   const saveBatchValues = async () => {
     const updates: CellValues = {};
     const invalid: string[] = [];
+    const validBatchColumns =
+      market.pattern === "FINAL_DAYS_6" ? MAIN_COLUMNS_6 : MAIN_COLUMNS_5;
     for (const rawLine of batchValues.split(/\r?\n/)) {
       const line = rawLine.trim();
       if (!line) continue;
       const match = /^([A-Z]+\d+)\s*(?:=|:)\s*(\d{1,2}|\*)$/i.exec(line);
       if (!match) { invalid.push(line); continue; }
       const cell = match[1].toUpperCase();
+      const cellMatch = /^([A-Z]+)(\d+)$/.exec(cell);
+
+      if (!cellMatch || !validBatchColumns.includes(cellMatch[1])) {
+        invalid.push(line);
+        continue;
+      }
+
       updates[cell] = match[2] === "*" ? "*" : match[2].length === 2 ? match[2] : Number(match[2]);
     }
     if (!Object.keys(updates).length || invalid.length) {
       setSaveMessage(invalid.length ? `या line योग्य नाहीत: ${invalid.slice(0, 2).join(", ")}` : "Paste करण्यासाठी किमान एक value भरा.");
       return;
     }
+    const existingBatchCells = Object.keys(updates).filter(
+      (cell) => savedValues[cell] !== undefined
+    );
+
     const updated: CellValues = { ...savedValues, ...updates };
 
     const derivedColumns: Record<string, [string, string, string, string]> = {
@@ -423,15 +508,42 @@ export default function Home() {
       updated[`${totalCol}${rowNumber}`] = derived.total;
       updated[`${differenceCol}${rowNumber}`] = derived.difference;
     });
-    await saveDailyValues(marketId, updated);
-    setSavedValues(updated);
-    setBatchValues("");
-    setSaveMessage(`${Object.keys(updates).length} values offline save झाल्या.`);
-    const paused = checkpoint ?? await loadCheckpoint(marketId, calculationMode);
-    if (paused?.status === "WAITING_FOR_VALUES" && paused.nextMainCell && updates[paused.nextMainCell] !== undefined && updates[paused.nextMainCell] !== "*") {
-      setSaveMessage(`${Object.keys(updates).length} values save झाल्या. Pending calculation आपोआप पुढे सुरू झाली.`);
-      await performCalculation(updated, paused.rootMainCell ?? paused.nextMainCell, paused, true);
+    const saveConfirmedBatchValues = async () => {
+      await saveDailyValues(marketId, updated);
+      setSavedValues(updated);
+      setBatchValues("");
+      setSaveMessage(`${Object.keys(updates).length} values offline save झाल्या.`);
+      const paused = checkpoint ?? await loadCheckpoint(marketId, calculationMode);
+      if (paused?.status === "WAITING_FOR_VALUES" && paused.nextMainCell && updates[paused.nextMainCell] !== undefined && updates[paused.nextMainCell] !== "*") {
+        setSaveMessage(`${Object.keys(updates).length} values save झाल्या. Pending calculation आपोआप पुढे सुरू झाली.`);
+        await performCalculation(updated, paused.rootMainCell ?? paused.nextMainCell, paused, true);
+      }
+    };
+
+    if (existingBatchCells.length > 0) {
+      const preview = existingBatchCells.slice(0, 5).join(", ");
+      const more =
+        existingBatchCells.length > 5
+          ? ` +${existingBatchCells.length - 5} more`
+          : "";
+
+      Alert.alert(
+        "Values already exist",
+        `${existingBatchCells.length} cell(s) already have saved values: ${preview}${more}. Do you want to replace them?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Continue",
+            onPress: () => {
+              void saveConfirmedBatchValues();
+            },
+          },
+        ]
+      );
+      return;
     }
+
+    await saveConfirmedBatchValues();
   };
 
 const deleteValue = async () => {
