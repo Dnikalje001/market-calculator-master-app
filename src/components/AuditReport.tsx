@@ -3,7 +3,7 @@ import { useState } from "react";
 import { TraversalRecord } from "../domain/traversal";
 import { Pattern } from "../domain/markets";
 import { CalculationCheckpoint } from "../domain/types";
-import { CalculationMode } from "../domain/calculation";
+import { CalculationMode, getCommonCriteria } from "../domain/calculation";
 
 export function AuditReport({
   records,
@@ -557,17 +557,19 @@ if (matchClose) return opposite ? "Close • Opposite" : "Close";
         marginBottom: 8,
       }}
     >
-      Progression • C{record.branch.criteria}
+      Progression •{" "}
+      {getCommonCriteria(record.audit.days)
+        .map((criteria) => `C${criteria}`)
+        .join(", ")}
     </Text>
 
     {record.audit.days.map((day, dayIndex) => {
-      const branchCriteria = record.branch?.criteria;
+      const progressionCriteria = getCommonCriteria(record.audit.days);
 
       const matchingLines = day.lines.filter(
         (line) =>
           line.status === "MATCH" &&
-          branchCriteria !== undefined &&
-          line.criteria === branchCriteria
+          progressionCriteria.includes(line.criteria)
       );
 
       return (
@@ -609,7 +611,7 @@ if (matchClose) return opposite ? "Close • Opposite" : "Close";
             ))
           ) : (
             <Text style={styles.detail}>
-              No matching C{branchCriteria} line
+              No matching {progressionCriteria.map((criteria) => `C${criteria}`).join(", ")} line
             </Text>
           )}
         </View>
