@@ -9,3 +9,5 @@ android/build/
 
 *.log
 .DS_Store
+
+*.apk
